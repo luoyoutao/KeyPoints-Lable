@@ -1,16 +1,18 @@
-﻿import os
+import os
 import json
 import numpy as np
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
 from PIL import ImageTk, Image, ImageDraw
-from tkinter import StringVar
+from tkinter import StringVar, ttk
 
 
 key_points = ['', 'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear', 'left_shoulder', 'right_shoulder',
               'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist', 'left_hip', 'right_hip', 'left_knee',
               'right_knee', 'left_ankle', 'right_ankle']
+color = ['', 'red', 'pink', 'green', 'pink', 'green', 'pink', 'green', 'pink', 'green',
+         'pink', 'green', 'pink', 'green', 'pink', 'green', 'pink', 'green']
 window = tk.Tk()
 window.title('欢迎使用猫猫牌打标签软件')
 window.geometry('%dx%d+%d+%d' % (1150, 900, 150, 40))  # 窗口尺寸以及位置
@@ -18,41 +20,66 @@ window.update_idletasks()
 btn = [[0 for x in range(2)] for x in range(10)]
 
 # 创建一个画布，用于显示图。参数 ： 父容器、背景色、内容、在容器中的位置
-global canvas, image_display1, image_display2, image_down, draw, label, sums, key_id, flag, text_label_id, \
-    text_label_sum, point_save, img_path, file_path, file_path_id, first_save, save_file, frame, coordinate
+global canvas, image_display1, image_display2, image_down1, draw, sums, key_id, flag, text_label_id, \
+    text_label_sum, point_save, img_path, file_path, file_path_id, first_save, save_file, frame, coordinate, \
+    image_down2, cmb, dict_cmb, pic_size, change_size_time, can_load_next_one
 
 
 def init():
-    global canvas, image_display1, image_display2, image_down, draw, sums, key_id, flag, text_label_id, \
-        text_label_sum, point_save, img_path, first_save, file_path, frame, coordinate
-    sums = 0        # 记录当前已经标记过的点的个数
-    key_id = 1      # 记录当前即将标注的关键点的id序号
-    first_save = 1  # 判断是否是第一次保存，1为是，0为否
-    file_path = []  # 用于存放多张图片的路径的list
+    global canvas, image_display1, image_display2, draw, sums, key_id, flag, text_label_id, change_size_time, \
+        text_label_sum, point_save, img_path, first_save, file_path, frame, coordinate, cmb, dict_cmb, pic_size, \
+        can_load_next_one
+    sums = 0                # 记录当前已经标记过的点的个数
+    key_id = 1              # 记录当前即将标注的关键点的id序号
+    first_save = 1          # 判断是否是第一次保存，1为是，0为否
+    file_path = []          # 用于存放多张图片的路径的list
+    can_load_next_one = 0   # 是否可以加载下一张图的flag
     flag = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    dict_cmb = {'512x512': 512, '256x256': 256, '128x128': 128, '64x64': 64, '28x28': 28}
     coordinate = [(0, 0), (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1), (4, 0), (4, 1),
                   (5, 0), (5, 1), (6, 0), (6, 1), (7, 0), (7, 1), (8, 0)]
     point_save = {}
+    pic_size = 512
+    change_size_time = 0
     text_label_id = StringVar()
     text_label_id.set(str(key_id))
     text_label_sum = StringVar()
     text_label_sum.set(str(sums))
     frame = tk.Frame(window)
     frame.place(x=650, y=350)
+    tk.Label(window, text='请设置图片大小（请在开始前设置好，且打开一次软件只能设置一次）', font=('Times', 8), fg='black').place(x=245, y=600)
+    cmb = ttk.Combobox(master=window, state='readonly', font='25')
+    cmb.place(x=250, y=630)
+    cmb['value'] = ('512x512', '256x256', '128x128', '64x64', '28x28')
+    cmb.current(0)
+    cmb.bind("<<ComboboxSelected>>", get_event)
     canvas = tk.Canvas(window, bg='grey', height=512, width=512)
     canvas.pack(anchor='nw')
     canvas.bind(sequence="<Button-1>", func=mouse_event_left)
     canvas.bind(sequence="<Button-3>", func=mouse_event_right)
-    window.bind(sequence="<Up>", func=up_event)
-    window.bind(sequence="<Down>", func=down_event)
-    window.bind(sequence="<s>", func=save_data_pic)
+    window.bind(sequence="<Left>", func=up_event)
+    window.bind(sequence="<Right>", func=down_event)
+    window.bind(sequence="<Key-s>", func=save_data_pic_control)
+
+
+def get_event(e):
+    """
+    下拉复选框设置图片的大小
+    """
+    global pic_size, canvas, dict_cmb, change_size_time
+    if change_size_time == 1:
+        return
+    change_size_time = 1
+    size_str = cmb.get()
+    pic_size = dict_cmb[size_str]
+    canvas.config(width=pic_size, height=pic_size)
 
 
 def up_event(e):
-    '''
+    """
     功能 ：选择标签类别，往后
     参数 ：键盘事件，按 “上箭头” 按键
-    '''
+    """
     global key_id, text_label_id
     if key_id is 1:
         messagebox.showinfo(title='友情提示', message='已经到第一个了！')
@@ -62,10 +89,10 @@ def up_event(e):
 
 
 def down_event(e):
-    '''
+    """
     功能 ：选择标签类别，往后
     参数 ：键盘事件，按 “下箭头” 按键
-    '''
+    """
     global key_id, text_label_id
     if key_id is 17:
         messagebox.showinfo(title='友情提示', message='已经到最后了！')
@@ -75,56 +102,28 @@ def down_event(e):
 
 
 def reload():
-    '''
+    """
     功能 ：重新加载删除某个打好的点的图片
-    '''
-    global canvas, image_display1, image_display2, image_down, draw, label, img_path, point_save
+    """
+    global canvas, image_display1, image_display2, image_down1, draw, img_path, point_save
     image_display1 = image_display2
     del draw
-    image_down = Image.open(img_path)
-    draw = ImageDraw.Draw(image_down)
+    image_down1 = Image.open(img_path)
+    image_down1 = change_pic_size(image_down1)
+    draw = ImageDraw.Draw(image_down1)
     canvas.create_image(0, 0, anchor='nw', image=image_display1)
     canvas.update()
-    color = ['red', 'green']
     for p in point_save:
         pos = point_save[p]
-        canvas.create_oval(pos['x'] - 3, pos['y'] - 3, pos['x'] + 3, pos['y'] + 3, fill=color[pos['v']])
-        draw.ellipse((pos['x'] - 3, pos['y'] - 3, pos['x'] + 3, pos['y'] + 3), fill=color[pos['v']])
+        canvas.create_oval(pos['x'] - 3, pos['y'] - 3, pos['x'] + 3, pos['y'] + 3, fill=color[key_points.index(p)])
+        draw.ellipse((pos['x'] - 3, pos['y'] - 3, pos['x'] + 3, pos['y'] + 3), fill=color[key_points.index(p)])
 
 
 def mouse_event_left(e):
-    '''
+    """
     功能 ：对画布内鼠标左击进行事件响应，标点和记录标签
     param e: 鼠标事件源
-    '''
-    global canvas, draw, key_id, sums, text_label_id, text_label_id, point_save, flag, coordinate
-    if sums is 17:
-        messagebox.showinfo(title='友情提示', message='已经标记了所有点！')
-        return
-    point_save[key_points[key_id]] = {'x': e.x, 'y': e.y, 'v': 0}
-    x, y = coordinate[key_id]
-    btn[x][y].config(bg='green')
-    flag[key_id] = 1
-    sums = sums + 1
-    key_id = (key_id + 1) % 18
-    count = 0
-    while flag[key_id % 18] == 1:
-        key_id = (key_id + 1) % 18
-        count = count + 1
-        if count > 17:
-            key_id = -1
-            break
-    text_label_id.set(str(key_id))
-    text_label_sum.set(str(sums))
-    canvas.create_oval(e.x - 3, e.y - 3, e.x + 3, e.y + 3, fill='red')
-    draw.ellipse((e.x - 3, e.y - 3, e.x + 3, e.y + 3), fill='red')
-
-
-def mouse_event_right(e):
-    '''
-    功能 ：对画布内鼠标左击进行事件响应，标点和记录标签
-    param e: 鼠标事件源
-    '''
+    """
     global canvas, draw, key_id, sums, text_label_id, text_label_id, point_save, flag, coordinate
     if sums is 17:
         messagebox.showinfo(title='友情提示', message='已经标记了所有点！')
@@ -144,24 +143,87 @@ def mouse_event_right(e):
             break
     text_label_id.set(str(key_id))
     text_label_sum.set(str(sums))
-    canvas.create_oval(e.x - 3, e.y - 3, e.x + 3, e.y + 3, fill='green')
-    draw.ellipse((e.x - 3, e.y - 3, e.x + 3, e.y + 3), fill='green')
+    canvas.create_oval(e.x - 3, e.y - 3, e.x + 3, e.y + 3, fill=color[key_id - 1])
+    draw.ellipse((e.x - 3, e.y - 3, e.x + 3, e.y + 3), fill=color[key_id - 1])
+
+
+def mouse_event_right(e):
+    """
+    功能 ：对画布内鼠标左击进行事件响应，标点和记录标签
+    param e: 鼠标事件源
+    """
+    global canvas, draw, key_id, sums, text_label_id, text_label_id, point_save, flag, coordinate
+    if sums is 17:
+        messagebox.showinfo(title='友情提示', message='已经标记了所有点！')
+        return
+    point_save[key_points[key_id]] = {'x': e.x, 'y': e.y, 'v': 1}
+    x, y = coordinate[key_id]
+    btn[x][y].config(bg='green')
+    flag[key_id] = 1
+    sums = sums + 1
+    key_id = (key_id + 1) % 18
+    count = 0
+    while flag[key_id % 18] == 1:
+        key_id = (key_id + 1) % 18
+        count = count + 1
+        if count > 17:
+            key_id = -1
+            break
+    text_label_id.set(str(key_id))
+    text_label_sum.set(str(sums))
+    canvas.create_oval(e.x - 3, e.y - 3, e.x + 3, e.y + 3, fill=color[key_id - 1])
+    draw.ellipse((e.x - 3, e.y - 3, e.x + 3, e.y + 3), fill=color[key_id - 1])
+
+
+def change_pic_size(img_start):
+
+    """
+    1、w > 512 & h > 512
+    2、w < 512 & h < 512
+    3、w > 512 & h < 512
+    4、w < 512 & h > 512
+    """
+    global pic_size
+    width, height = img_start.size
+    if width >= pic_size and height >= pic_size:
+        new_pic = img_start.resize((pic_size, pic_size))
+    elif width <= pic_size and height <= pic_size:
+        bu_x = (pic_size - width) // 2
+        bu_y = (pic_size - height) // 2
+        new_pic = Image.new('RGB', (pic_size, pic_size), color=0)
+        new_pic.paste(img_start, (bu_x, bu_y))
+    elif height <= pic_size <= width:
+        img_resize = img_start.resize((pic_size, height))
+        bu_y = (pic_size - height) // 2
+        new_pic = Image.new('RGB', (pic_size, pic_size), color=0)
+        new_pic.paste(img_resize, (0, bu_y))
+    elif width <= pic_size <= height:
+        img_resize = img_start.resize((width, pic_size))
+        bu_x = (pic_size - width) // 2
+        new_pic = Image.new('RGB', (pic_size, pic_size), color=0)
+        new_pic.paste(img_resize, (0, bu_x))
+
+    return new_pic
 
 
 def load_one_pic():
-    '''
+    """
     功能 ：加载一张图片
-    '''
-    global canvas, image_display1, img_path, image_display2, draw, image_down, key_id, sums, flag, point_save
+    """
+    global canvas, image_display1, img_path, image_display2, draw, image_down1, key_id, sums, flag, point_save, \
+        image_down2
     point_save.clear()
     filetypes = [('jpg', '*.jpg'), ('png', '*.png')]    # 设置可以选择的文件类型，不属于这个类型的，无法被选中
     file_name = filedialog.askopenfilename(title='选择单个文件', filetypes=filetypes, initialdir='./')  # 打开当前程序工作目录
     if not file_name:
         return
     img_path = file_name
-    image_down = Image.open(img_path).resize((512, 512))
-    image_display1 = image_display2 = ImageTk.PhotoImage(image_down)
-    draw = ImageDraw.Draw(image_down)
+    image_down1 = Image.open(img_path)
+    image_down2 = Image.open(img_path)
+    image_down1 = change_pic_size(image_down1)
+    image_down2 = change_pic_size(image_down2)
+    image_display1 = image_display2 = ImageTk.PhotoImage(image_down1)
+    draw = ImageDraw.Draw(image_down1)
     canvas.create_image(0, 0, anchor='nw', image=image_display1)
     canvas.update
     sums = 0
@@ -171,14 +233,14 @@ def load_one_pic():
     flag = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     for i in range(1, len(coordinate)):
         x, y = coordinate[i]
-        btn[x][y].config(bg='grey')
+        btn[x][y].config(bg='red')
 
 
 def load_many_pic():
-    '''
+    """
     功能 ：选择一个文件夹，加载多张图片
-    '''
-    global file_path, file_path_id
+    """
+    global file_path, file_path_id, can_load_next_one
     file_name = filedialog.askdirectory(title='选择一个文件夹', initialdir='./')  # 打开当前程序工作目录
     if not file_name:
         return
@@ -186,23 +248,28 @@ def load_many_pic():
         file_path.append(file_name + '/' + filename)
     file_path_id = 0
     load_many_of_one()
-
+    can_load_next_one = 1
 
 def load_many_of_one():
-    '''
+    """
     功能 ：加载文件夹中的一张图片
-    '''
-    global canvas, image_display1, image_display2, draw, image_down, file_path, file_path_id, img_path, key_id, sums, \
-        flag, coordinate, point_save
+    """
+    global canvas, image_display1, image_display2, draw, image_down1, file_path, file_path_id, img_path, key_id, sums, \
+        flag, coordinate, point_save, image_down2, can_load_next_one
+    if can_load_next_one is 0:
+        return
     flag = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     point_save.clear()
     for i in range(1, len(coordinate)):
         x, y = coordinate[i]
-        btn[x][y].config(bg='grey')
+        btn[x][y].config(bg='red')
     img_path = file_path[file_path_id]
-    image_down = Image.open(file_path[file_path_id]).resize((512, 512))
-    image_display1 = image_display2 = ImageTk.PhotoImage(image_down)
-    draw = ImageDraw.Draw(image_down)
+    image_down1 = Image.open(file_path[file_path_id])
+    image_down2 = Image.open(file_path[file_path_id])
+    image_down1 = change_pic_size(image_down1)
+    image_down2 = change_pic_size(image_down2)
+    image_display1 = image_display2 = ImageTk.PhotoImage(image_down1)
+    draw = ImageDraw.Draw(image_down1)
     text_label_sum.set(str(sums))
     text_label_id.set(str(key_id))
     canvas.create_image(0, 0, anchor='nw', image=image_display1)
@@ -211,14 +278,14 @@ def load_many_of_one():
 
 
 def delete_id_point(id):
-    '''
+    """
     功能 ：删除某个打好的标签
     param id: 该标签所对应的id号
-    '''
+    """
     global flag, text_label_id, text_label_sum, key_id, sums, point_save, coordinate
     x, y = coordinate[id]
     if btn[x][y]['bg'] == 'green':
-        btn[x][y].config(bg='grey')
+        btn[x][y].config(bg='red')
     if flag[id] is 1:
         key_id = id
         flag[id] = 0
@@ -230,25 +297,26 @@ def delete_id_point(id):
 
 
 def save_data_pic():
-    '''
+    """
     功能 ：保存当前图像的标签数据和图像信息
-    '''
-    global image_down, point_save, img_path, file_path_id, sums, key_id, first_save, save_file, flag, sums, key_id
+    """
+    global image_down1, point_save, img_path, file_path_id, sums, key_id, first_save, save_file, flag, sums, \
+        key_id, image_down2
     if first_save is 1:
         messagebox.showinfo(title='友情提示', message='请选择一个文件路径，被标记好的图片放在该文件\n路径下的img文件夹中，'
                                                   '标签数据存为该文件路\n径下的images.txt和annotations.txt！')
         save_file = filedialog.askdirectory(title='选择一个文件夹', initialdir='./')  # 打开当前程序工作目录
         if not save_file:
             return
-        if not os.path.exists(save_file + '/img'):
-            os.mkdir(save_file + '/img')
-
+        if not os.path.exists(save_file + '/img_label'):
+            os.mkdir(save_file + '/img_label')
+        if not os.path.exists(save_file + '/img_train'):
+            os.mkdir(save_file + '/img_train')
         first_save = 0
-    image_down.save(save_file + '/img/' + img_path.split('/')[-1])  # 保存打好标签后的图片
-
+    image_down1.save(save_file + '/img_label/' + img_path.split('/')[-1])  # 保存打好标签后的图片
+    image_down2.save(save_file + '/img_train/' + img_path.split('/')[-1])  # 保存打好标签后的图片
     file_name_images = save_file + '/images.txt'
     open(file_name_images, 'a')
-    image_id = len(open(file_name_images, 'r').readlines())
     json_image = {'image_id': img_path.split('/')[-1][:-4], 'file_name': img_path.split('/')[-1]}
     open(file_name_images, 'a').writelines(json.dumps(json_image) + '\n')
     open(file_name_images, 'a').close()
@@ -260,7 +328,7 @@ def save_data_pic():
             temp_key_points.extend((point_save[key]['x'], point_save[key]['y'], point_save[key]['v']))
         else:
             temp_key_points.extend((0, 0, 0))
-    json_annotations = {'image_id': img_path.split('/')[-1][:-4], 'num_key_points': len(point_save), 'key_points': temp_key_points}
+    json_annotations = {'image_id': img_path.split('/')[-1][:-4], 'num_keypoints': len(point_save), 'keypoints': temp_key_points}
     open(file_name_annotations, 'a').writelines(json.dumps(json_annotations) + '\n')
     open(file_name_annotations, 'a').close()
 
@@ -271,17 +339,21 @@ def save_data_pic():
     text_label_sum.set(str(sums))
     for x in range(8):
         for y in range(2):
-            btn[x][y].config(bg='grey')
-    btn[8][0].config(bg='grey')
+            btn[x][y].config(bg='red')
+    btn[8][0].config(bg='red')
 
     if len(file_path) > 0 and file_path_id < len(file_path):  # 继续加载后面的即将打标签的图片
         load_many_of_one()
 
 
+def save_data_pic_control(e):
+    save_data_pic()
+
+
 def save_data_json():
-    '''
+    """
     功能 ：保存s所有打好标签的图像的标签数据和图像信息为json数据
-    '''
+    """
     answer = messagebox.askokcancel(title='友情提示', message='请确保所有的训练图片标签都已经被打好标签再执行，是否继续执行？')
     if answer is False:
         return
@@ -328,11 +400,11 @@ def save_data_json():
 
 
 def fun_introduce():
-    messagebox.showinfo(title='功能介绍', message='欢迎来到cat标签软件😄，下面为您介绍使用方法：\n'
+    messagebox.showinfo(title='功能介绍', message='欢迎来到cat标签软件，下面为您介绍使用方法：\n'
                         '该软件用于给检测人体关节点检测器的训练图片数据打标签，最终保存的数据和coco数据集格式一致,'
                         '您可以加载一张图片进行标记，也可以加载有多张图片的文件夹进行标记，后者标记完一张将自动加载下一张图片，'
                         '点击鼠标左键表示标记某可见关节点，点击鼠标右键表示标记某被遮挡的关节点。点击右边两列的按钮，可以取消'
-                        '某个打好的关节点标签。通过按下键盘的”↑”和“↓”按键，可以选择即将标记的关节点的id（对应右边两列按钮的编号），'
+                        '某个打好的关节点标签。通过按下键盘的”←”和“→”按键，可以选择即将标记的关节点的id（对应右边两列按钮的编号），'
                         '标记好一张图片后，请点击“保存该图片标签数据”按钮或按下"s"键，当最后所有的图片的标签都已经打好后，'
                         '点击”保存为json数据“按钮即可。点击“退出”按钮则退出软件。\n最后，再次感谢您的使用，您若有任何建议和疑问，'
                                               '请致975704634@gmail')
@@ -340,9 +412,9 @@ def fun_introduce():
 
 
 def click_button_exit():
-    '''
+    """
     功能 ：退出程序
-    '''
+    """
     window.destroy()
 
 
@@ -367,12 +439,12 @@ t = -1
 for x in range(8):
     for y in range(2):
         t = t + 1
-        btn[x][y] = tk.Button(frame, text=str(t + 1) + '-' + key_points[t + 1], width=15, height=2, bg='grey',
+        btn[x][y] = tk.Button(frame, text=str(t + 1) + '-' + key_points[t + 1], width=15, height=2, bg='red',
                               command=lambda t=t: delete_id_point(t + 1))
         btn[x][y].grid(column=y, row=x, padx=3, pady=3)
 
 
-btn[8][0] = tk.Button(frame, text=str(t + 2) + '-' + key_points[t + 2], width=15, height=2, bg='grey',
+btn[8][0] = tk.Button(frame, text=str(t + 2) + '-' + key_points[t + 2], width=15, height=2, bg='red',
                     command=lambda: delete_id_point(17))
 btn[8][0].grid(column=0, row=8, padx=3, pady=3)
 
@@ -381,6 +453,9 @@ button_many.place(x=5, y=600, width=150, height=50)
 
 button_one = tk.Button(window, text='加载一张图', font=('Times', 22), bg='green', fg='black', command=load_one_pic)
 button_one.place(x=5, y=700, width=150, height=50)
+
+button_next = tk.Button(window, text='加载下张图', font=('Times', 22), bg='green', fg='black', command=load_many_of_one)
+button_next.place(x=245, y=700, width=150, height=50)
 
 button_exit = tk.Button(window, text='退出', font=('Times', 20),  bg='red', fg='black', command=click_button_exit)
 button_exit.place(x=5, y=800, width=100, height=50)
@@ -632,10 +707,9 @@ a = np.array([
      255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
      255, 255, 255, 255, 255, 255, 255, 255]])
 img = ImageTk.PhotoImage(image=Image.fromarray(a))
-tk.Label(window, image=img).place(x=250, y=600, width=100, height=57)
+tk.Label(window, image=img).place(x=250, y=800, width=100, height=57)
 
 button_many = tk.Button(window, text='有惊喜', font=('Times', 22), bg='pink', fg='black', command=fun_introduce)
-button_many.place(x=400, y=598, width=150, height=60)
+button_many.place(x=400, y=798, width=150, height=60)
 
 window.mainloop()          # 显示出来
-
